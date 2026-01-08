@@ -19,6 +19,7 @@ class ConeAnimation {
   private coneNormalBuffer: WebGLBuffer | null = null;
   private coneIndexBuffer: WebGLBuffer | null = null;
   private axisBuffer: WebGLBuffer | null = null;
+  private directionVectorBuffer: WebGLBuffer | null = null;
   private coneParams: ConeParams = { radius: 1, height: 2, segments: 32 };
   private coneVertexCount = 0;
 
@@ -29,6 +30,7 @@ class ConeAnimation {
   private animationSpeed = 0.01;
   private showIntermediateFrames = true;
   private intermediateFrames: quat[] = [];
+  private loopAnimation = true;
 
   constructor(canvasId: string) {
     this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
@@ -62,7 +64,7 @@ class ConeAnimation {
 
   private generateIntermediateFrames() {
     this.intermediateFrames = [];
-    const steps = 10;
+    const steps = 20;
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       const q = quat.create();
@@ -87,6 +89,7 @@ class ConeAnimation {
 
     this.generateCone();
     this.generateAxisLines();
+    this.generateDirectionVectors();
 
     this.gl.enable(this.gl.DEPTH_TEST);
     this.gl.enable(this.gl.BLEND);
@@ -188,6 +191,24 @@ class ConeAnimation {
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(vertices), this.gl.STATIC_DRAW);
   }
 
+  private generateDirectionVectors() {
+    const vectorLength = this.coneParams.height * 1.5;
+    const startDir = vec3.clone(this.startOrientation.axis);
+    const endDir = vec3.clone(this.endOrientation.axis);
+
+    vec3.scale(startDir, startDir, vectorLength);
+    vec3.scale(endDir, endDir, vectorLength);
+
+    const vertices = [
+      0, 0, 0, startDir[0], startDir[1], startDir[2],
+      0, 0, 0, endDir[0], endDir[1], endDir[2]
+    ];
+
+    this.directionVectorBuffer = this.gl.createBuffer();
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.directionVectorBuffer);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(vertices), this.gl.DYNAMIC_DRAW);
+  }
+
   private drawCone(quaternion: quat, alpha: number) {
     if (!this.program) return;
 
@@ -237,10 +258,10 @@ class ConeAnimation {
     const uAlpha = this.gl.getUniformLocation(this.program, 'uAlpha');
 
     this.gl.uniform3f(uLightPosition, 5, 5, 5);
-    this.gl.uniform3f(uAmbientColor, 0.2, 0.2, 0.2);
-    this.gl.uniform3f(uDiffuseColor, 0.3, 0.6, 0.9);
-    this.gl.uniform3f(uSpecularColor, 1, 1, 1);
-    this.gl.uniform1f(uShininess, 32.0);
+    this.gl.uniform3f(uAmbientColor, 0.3, 0.3, 0.3);
+    this.gl.uniform3f(uDiffuseColor, 0.4, 0.7, 1.0);
+    this.gl.uniform3f(uSpecularColor, 0.8, 0.8, 0.8);
+    this.gl.uniform1f(uShininess, 64.0);
     this.gl.uniform1f(uAlpha, alpha);
 
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.coneIndexBuffer);
@@ -306,16 +327,76 @@ class ConeAnimation {
     this.gl.drawArrays(this.gl.LINES, 4, 2);
   }
 
+  private drawDirectionVectors() {
+    if (!this.program) return;
+
+    const viewMatrix = mat4.create();
+    mat4.lookAt(viewMatrix, [5, 5, 5], [0, 0, 0], [0, 1, 0]);
+
+    const projectionMatrix = mat4.create();
+    mat4.perspective(projectionMatrix, Math.PI / 4, this.canvas.width / this.canvas.height, 0.1, 100);
+
+    const modelViewMatrix = mat4.create();
+    mat4.copy(modelViewMatrix, viewMatrix);
+
+    const normalMatrix = mat4.create();
+    mat4.identity(normalMatrix);
+
+    this.gl.useProgram(this.program);
+
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.directionVectorBuffer);
+    const positionLoc = this.gl.getAttribLocation(this.program, 'aPosition');
+    this.gl.enableVertexAttribArray(positionLoc);
+    this.gl.vertexAttribPointer(positionLoc, 3, this.gl.FLOAT, false, 0, 0);
+
+    const normalLoc = this.gl.getAttribLocation(this.program, 'aNormal');
+    this.gl.disableVertexAttribArray(normalLoc);
+    this.gl.vertexAttrib3f(normalLoc, 0, 1, 0);
+
+    const uModelViewMatrix = this.gl.getUniformLocation(this.program, 'uModelViewMatrix');
+    const uProjectionMatrix = this.gl.getUniformLocation(this.program, 'uProjectionMatrix');
+    const uNormalMatrix = this.gl.getUniformLocation(this.program, 'uNormalMatrix');
+
+    this.gl.uniformMatrix4fv(uModelViewMatrix, false, modelViewMatrix);
+    this.gl.uniformMatrix4fv(uProjectionMatrix, false, projectionMatrix);
+    this.gl.uniformMatrix4fv(uNormalMatrix, false, normalMatrix);
+
+    const uLightPosition = this.gl.getUniformLocation(this.program, 'uLightPosition');
+    const uAmbientColor = this.gl.getUniformLocation(this.program, 'uAmbientColor');
+    const uDiffuseColor = this.gl.getUniformLocation(this.program, 'uDiffuseColor');
+    const uSpecularColor = this.gl.getUniformLocation(this.program, 'uSpecularColor');
+    const uShininess = this.gl.getUniformLocation(this.program, 'uShininess');
+    const uAlpha = this.gl.getUniformLocation(this.program, 'uAlpha');
+
+    this.gl.uniform3f(uLightPosition, 5, 5, 5);
+    this.gl.uniform3f(uSpecularColor, 0, 0, 0);
+    this.gl.uniform1f(uShininess, 1.0);
+    this.gl.uniform1f(uAlpha, 1.0);
+
+    this.gl.lineWidth(2.0);
+
+    this.gl.uniform3f(uAmbientColor, 1, 1, 0);
+    this.gl.uniform3f(uDiffuseColor, 1, 1, 0);
+    this.gl.drawArrays(this.gl.LINES, 0, 2);
+
+    this.gl.uniform3f(uAmbientColor, 1, 0.5, 0);
+    this.gl.uniform3f(uDiffuseColor, 1, 0.5, 0);
+    this.gl.drawArrays(this.gl.LINES, 2, 2);
+
+    this.gl.lineWidth(1.0);
+  }
+
   private render() {
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     this.gl.clearColor(0.1, 0.1, 0.15, 1);
     this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
 
     this.drawAxes();
+    this.drawDirectionVectors();
 
     if (this.showIntermediateFrames && !this.isAnimating) {
       for (let i = 0; i < this.intermediateFrames.length; i++) {
-        const alpha = 0.2 + (i / this.intermediateFrames.length) * 0.5;
+        const alpha = 0.15 + (i / this.intermediateFrames.length) * 0.3;
         this.drawCone(this.intermediateFrames[i], alpha);
       }
     } else {
@@ -327,7 +408,12 @@ class ConeAnimation {
     if (this.isAnimating) {
       this.animationProgress += this.animationSpeed;
       if (this.animationProgress >= 1) {
-        this.animationProgress = 0;
+        if (this.loopAnimation) {
+          this.animationProgress = 0;
+        } else {
+          this.animationProgress = 1;
+          this.isAnimating = false;
+        }
       }
     }
 
@@ -364,11 +450,21 @@ class ConeAnimation {
   setStartAxis(axis: vec3) {
     vec3.normalize(this.startOrientation.axis, axis);
     this.updateOrientationQuaternions();
+    this.generateDirectionVectors();
   }
 
   setEndAxis(axis: vec3) {
     vec3.normalize(this.endOrientation.axis, axis);
     this.updateOrientationQuaternions();
+    this.generateDirectionVectors();
+  }
+
+  setLoopAnimation(loop: boolean) {
+    this.loopAnimation = loop;
+  }
+
+  getAnimationProgress(): number {
+    return this.animationProgress;
   }
 }
 

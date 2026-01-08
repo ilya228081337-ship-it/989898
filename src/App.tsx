@@ -7,6 +7,7 @@ function App() {
   const animationRef = useRef<ConeAnimation | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [showFrames, setShowFrames] = useState(true);
+  const [loopAnimation, setLoopAnimation] = useState(true);
   const [radius, setRadius] = useState(1);
   const [height, setHeight] = useState(2);
   const [segments, setSegments] = useState(32);
@@ -69,6 +70,14 @@ function App() {
     setEndAxis(newAxis);
     if (animationRef.current) {
       animationRef.current.setEndAxis([newAxis.x, newAxis.y, newAxis.z]);
+    }
+  };
+
+  const handleLoopChange = () => {
+    const newLoop = !loopAnimation;
+    setLoopAnimation(newLoop);
+    if (animationRef.current) {
+      animationRef.current.setLoopAnimation(newLoop);
     }
   };
 
@@ -186,6 +195,19 @@ function App() {
                     className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                   />
                 </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <input
+                    type="checkbox"
+                    id="loop-animation"
+                    checked={loopAnimation}
+                    onChange={handleLoopChange}
+                    className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                  />
+                  <label htmlFor="loop-animation" className="text-sm font-medium text-slate-300 cursor-pointer">
+                    Зацикленная анимация
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -291,8 +313,10 @@ function App() {
                 <li>• <span className="text-red-500">Красная ось</span> - X</li>
                 <li>• <span className="text-green-500">Зеленая ось</span> - Y</li>
                 <li>• <span className="text-blue-500">Синяя ось</span> - Z</li>
-                <li>• Промежуточные кадры показывают траекторию движения</li>
-                <li>• SLERP обеспечивает плавную интерполяцию</li>
+                <li>• <span className="text-yellow-400">Желтый вектор</span> - начальная ориентация</li>
+                <li>• <span className="text-orange-500">Оранжевый вектор</span> - конечная ориентация</li>
+                <li>• Промежуточные кадры показывают траекторию SLERP</li>
+                <li>• 20 промежуточных кадров для плавности</li>
               </ul>
             </div>
           </div>
